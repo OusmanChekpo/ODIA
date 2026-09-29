@@ -1,0 +1,13 @@
+{
+  "name": "nikous",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Assistant local de contrôle de poste, sans dépendances npm.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  }
+}

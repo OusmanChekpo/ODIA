@@ -1,0 +1,8 @@
+# Donnees locales : conversations, reglages, notes et automatisations
+data/*
+!data/.gitkeep
+
+# Fichiers temporaires et journaux
+*.log
+.DS_Store
+Thumbs.db
