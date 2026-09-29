@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050a12">
+  <meta name="description" content="NIKOUS, assistant local de contrôle de poste — privé, en français et sans dépendance cloud.">
+  <title>NIKOUS — assistant local</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <span class="orb orb-brand" aria-hidden="true"><span class="orb-core"></span></span>
+        <span class="brand-copy">
+          <span class="brand-name">N.I.K.O.U.S</span>
+          <span class="brand-subtitle">ASSISTANT LOCAL · POSTE DE CONTRÔLE</span>
+        </span>
+      </div>
+      <div class="header-center" aria-live="polite">
+        <span class="pulse-dot"></span>
+        <span id="connection-label">INITIALISATION…</span>
+      </div>
+      <div class="header-actions">
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="Passer au thème clair" title="Changer de thème">☀️</button>
+        <button class="mode-control" id="mode-toggle" type="button" aria-pressed="false" title="Basculer entre le mode sûr et l’accès complet">
+          <span class="mode-light"></span>
+          <span id="mode-label">MODE SÛR</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Raccourcis et état de sécurité">
+        <div class="sidebar-section">
+          <div class="section-heading"><span>RACCOURCIS</span><span class="section-line"></span></div>
+          <button class="shortcut" data-prompt="état du système"><span class="shortcut-icon">◈</span><span><strong>État du système</strong><small>CPU · mémoire · disque</small></span><span class="shortcut-arrow">↗</span></button>
+          <button class="shortcut" data-prompt="liste les fichiers"><span class="shortcut-icon">▤</span><span><strong>Mes fichiers</strong><small>Parcourir la racine autorisée</small></span><span class="shortcut-arrow">↗</span></button>
+          <button class="shortcut" data-prompt="quelle heure est-il"><span class="shortcut-icon">◷</span><span><strong>Heure locale</strong><small>Horloge du poste</small></span><span class="shortcut-arrow">↗</span></button>
+          <button class="shortcut" data-prompt="mes notes"><span class="shortcut-icon">▧</span><span><strong>Mes notes</strong><small>Rappels et idées sauvegardés</small></span><span class="shortcut-arrow">↗</span></button>
+        </div>
+
+        <div class="sidebar-section examples-section">
+          <div class="section-heading"><span>ESSAYER</span><span class="section-line"></span></div>
+          <button class="example-prompt" data-prompt="rappelle-moi dans 10 minutes de faire une pause"><span>⏱</span> Programme un rappel</button>
+          <button class="example-prompt" data-prompt="calcule sqrt(81) + pi"><span>∑</span> Fais un calcul</button>
+          <button class="example-prompt" data-prompt="météo à Paris"><span>☼</span> Consulte la météo</button>
+          <button class="example-prompt" data-prompt="raconte une blague"><span>✳</span> Détends l’atmosphère</button>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="privacy-mark"><span>⌑</span><div><strong>TES DONNÉES RESTENT ICI</strong><small>Traitement local · aucune clé API</small></div></div>
+          <div class="root-label">RACINE AUTORISÉE</div>
+          <code id="root-path">Chargement…</code>
+          <button class="voice-setting" id="speech-toggle" type="button" aria-pressed="false"><span>🔊</span><span>Réponses vocales</span><span class="switch-mini"></span></button>
+        </div>
+      </aside>
+
+      <main class="chat-panel">
+        <section class="conversation-heading">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-mark"></span> SESSION LOCALE · AUCUN CLOUD</div>
+            <h1>À ton écoute<span class="heading-period">.</span></h1>
+            <p>Un poste de contrôle à portée de mots.</p>
+          </div>
+          <div class="session-badge"><span class="badge-icon">⌘</span><span><strong>ESPACE PRIVÉ</strong><small>Cette machine uniquement</small></span></div>
+        </section>
+
+        <section class="messages" id="messages" aria-label="Conversation" aria-live="polite" aria-relevant="additions text">
+          <div class="date-divider"><span></span><small id="today-label">AUJOURD’HUI</small><span></span></div>
+          <div class="message-row typing-row" id="typing-indicator" hidden>
+            <div class="assistant-avatar" aria-hidden="true"><span class="orb"><span class="orb-core"></span></span></div>
+            <div class="message-content"><div class="message-bubble typing-bubble"><span class="mini-orb" aria-hidden="true"></span><span>NIKOUS réfléchit…</span></div></div>
+          </div>
+        </section>
+
+        <section class="composer-wrap" aria-label="Écrire à NIKOUS">
+          <div class="quick-actions" aria-label="Suggestions rapides">
+            <button data-prompt="état du système">État du système</button>
+            <button data-prompt="liste les fichiers">Fichiers</button>
+            <button data-prompt="calcule ">Calcul</button>
+            <button data-prompt="aide">Aide</button>
+          </div>
+          <div class="composer" id="composer">
+            <label class="sr-only" for="message-input">Ton message</label>
+            <textarea id="message-input" rows="1" maxlength="4000" placeholder="Écris naturellement… (Entrée pour envoyer)" autocomplete="off"></textarea>
+            <div class="composer-actions">
+              <button class="mic-button" id="voice-button" type="button" aria-label="Dicter un message" title="Dicter en français">🎙</button>
+              <button class="send-button" id="send-button" type="button" aria-label="Envoyer le message"><span>ENVOYER</span><span aria-hidden="true">↑</span></button>
+            </div>
+          </div>
+          <div class="composer-footnote"><span>Entrée pour envoyer <kbd>↵</kbd><span class="footnote-separator">·</span> Maj + Entrée pour une nouvelle ligne</span><span class="local-lock">◈ TRAITEMENT LOCAL</span></div>
+          <div class="voice-hint" id="voice-hint" hidden role="status"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-label="Notifications"></div>
+  <noscript>Cette interface nécessite JavaScript pour communiquer avec le serveur local NIKOUS.</noscript>
+</body>
+</html>
