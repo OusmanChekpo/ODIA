@@ -6,12 +6,32 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { createApp } = require('../server');
+const { classifyOpenTarget, classifyOpenTargetAsync } = require('../server/actions/system');
 
 test('API bout en bout : interface, chat, confirmation, fichiers et événements SSE', async (t) => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'nikous-api-'));
   const root = path.join(temporary, 'racine');
   const dataDir = path.join(temporary, 'data');
   await fs.mkdir(root, { recursive: true });
+  await fs.mkdir(path.join(root, 'Documents'), { recursive: true });
+  await fs.writeFile(path.join(root, 'Documents', 'rapport.xlsx'), 'classeur de test');
+  const openDocument = await classifyOpenTargetAsync('Documents/rapport.xlsx', { root, fullAccess: false, platform: process.platform }, 'path');
+  assert.equal(openDocument.level, 'safe');
+  assert.equal(openDocument.type, 'path');
+  const openByName = await classifyOpenTargetAsync('rapport.xlsx', { root, fullAccess: false, platform: process.platform }, 'path');
+  assert.equal(openByName.level, 'safe');
+  assert.equal(openByName.isDirectory, false);
+  await fs.writeFile(path.join(root, 'outil.sh'), '# script de test, jamais exécuté');
+  const executableOpen = await classifyOpenTargetAsync('outil.sh', { root, fullAccess: false, platform: process.platform }, 'path');
+  assert.equal(executableOpen.level, 'confirm');
+  const outsideOpen = await classifyOpenTargetAsync('../outside.txt', { root, fullAccess: false, platform: process.platform }, 'path');
+  assert.equal(outsideOpen.level, 'blocked');
+  const openFolder = await classifyOpenTargetAsync('mes documents', { root, fullAccess: false, platform: process.platform }, 'path');
+  assert.equal(openFolder.level, 'safe');
+  assert.equal(openFolder.type, 'path');
+  assert.equal(openFolder.isDirectory, true);
+  assert.equal(classifyOpenTarget('Word', 'win32').level, 'safe');
+  assert.equal(classifyOpenTarget('Excel', 'win32').level, 'safe');
   const app = await createApp({ root, dataDir, publicDir: path.resolve(__dirname, '..', 'public'), forcedFullAccess: false });
   await new Promise((resolve, reject) => {
     app.server.once('error', reject);
@@ -28,7 +48,17 @@ test('API bout en bout : interface, chat, confirmation, fichiers et événements
 
   const page = await fetch(`${base}/`);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /NIKOUS/);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /NIKOUS/);
+  assert.match(pageHtml, /Démarrer la conversation vocale locale/);
+  assert.match(page.headers.get('permissions-policy') || '', /microphone=\(self\)/);
+  assert.match(page.headers.get('permissions-policy') || '', /on-device-speech-recognition=\(self\)/);
+  const appScript = await fetch(`${base}/app.js`);
+  assert.equal(appScript.status, 200);
+  const appSource = await appScript.text();
+  assert.match(appSource, /recognition\.processLocally = true/);
+  assert.match(appSource, /voice\.localService === true/);
+  assert.doesNotMatch(appSource, /processLocally\s*=\s*false/);
 
   async function chat(message) {
     const response = await fetch(`${base}/api/chat`, {

@@ -57,6 +57,10 @@ test('reconnaît les actions du poste et conserve la commande originale', () => 
   assert.equal(nlu.parse('quelle heure est-il').intent, 'system.time');
   assert.equal(nlu.parse('exécute commande git status').slots.command, 'git status');
   assert.equal(nlu.parse('ouvre https://example.com').slots.target, 'https://example.com');
+  assert.deepEqual(nlu.parse('ouvre le dossier Documents').slots, { target: 'Documents', targetType: 'path' });
+  assert.deepEqual(nlu.parse('ouvre un dossier Projets').slots, { target: 'Projets', targetType: 'path' });
+  assert.deepEqual(nlu.parse('ouvre un document rapport.xlsx').slots, { target: 'rapport.xlsx', targetType: 'path' });
+  assert.equal(nlu.parse('lance Excel').slots.target, 'Excel');
 });
 
 test('reconnaît les rappels et les récurrences quotidiennes', () => {

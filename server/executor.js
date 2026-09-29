@@ -155,7 +155,7 @@ class Executor {
           return { text: 'Je peux gérer tes fichiers, faire le point sur le système, lancer certaines commandes, prendre des notes, calculer, consulter la météo, programmer des rappels et exécuter des routines. Le tout en français, directement depuis cette interface 😊 Si tu veux la liste détaillée, dis simplement `aide`.' };
         case 'help':
           return {
-            text: 'Avec plaisir — voilà tout ce que je sais faire 👇\n\n**Fichiers** · `liste les fichiers` · `lis notes.txt` · `crée fichier idées.txt avec …` · `cherche fichier contenant budget` · `supprime fichier ancien.txt`\n\n**Poste** · `état du système` · `liste des processus` · `quelle heure est-il` · `exécute commande git status` · `ouvre https://…`\n\n**Quotidien** · `météo à Paris` · `calcule sqrt(81) + pi` · `note : appeler le médecin` · `mes notes` · `heure à Europe/Paris`\n\n**Automatisations** · `rappelle-moi dans 10 minutes de faire une pause` · `chaque lundi à 09:00 : état du système` · `toutes les 30 minutes : liste des processus` · `crée routine matin : état du système ; liste des processus`\n\nTu peux aussi enchaîner jusqu’à six demandes avec **puis**. En mode sûr, les actions sensibles demandent ton accord et les commandes destructrices restent bloquées. Qu’est-ce qu’on fait en premier ? 😊',
+            text: 'Avec plaisir — voilà tout ce que je sais faire 👇\n\n**Fichiers** · `liste les fichiers` · `lis notes.txt` · `crée fichier idées.txt avec …` · `cherche fichier contenant budget` · `supprime fichier ancien.txt`\n\n**Poste** · `état du système` · `liste des processus` · `quelle heure est-il` · `exécute commande git status` · `ouvre le dossier Documents` · `ouvre le document rapport.xlsx` · `ouvre Word` / `ouvre Excel` · `ouvre https://…`\n\n**Quotidien** · `météo à Paris` · `calcule sqrt(81) + pi` · `note : appeler le médecin` · `mes notes` · `heure à Europe/Paris`\n\n**Automatisations** · `rappelle-moi dans 10 minutes de faire une pause` · `chaque lundi à 09:00 : état du système` · `toutes les 30 minutes : liste des processus` · `crée routine matin : état du système ; liste des processus`\n\nTu peux aussi enchaîner jusqu’à six demandes avec **puis**, ou appuyer sur 🎙 pour parler en conversation vocale locale (Chrome récent et modèle fr-FR installé). En mode sûr, les actions sensibles demandent ton accord et les commandes destructrices restent bloquées. Qu’est-ce qu’on fait en premier ? 😊',
           };
         case 'system.time':
           return { text: `Il est **${localTime()}** chez toi ⏰` };
@@ -166,7 +166,7 @@ class Executor {
         case 'system.command':
           return this.executeCommand(slots.command);
         case 'system.open':
-          return this.executeOpen(slots.target);
+          return this.executeOpen(slots.target, slots.targetType);
         case 'files.list':
           return files.listFiles(slots, context);
         case 'files.read':
@@ -287,15 +287,16 @@ class Executor {
     return system.runCommand(command, this.context());
   }
 
-  async executeOpen(target) {
-    const verdict = system.classifyOpenTarget(target, this.platform);
+  async executeOpen(target, targetType) {
+    const verdict = await system.classifyOpenTargetAsync(target, this.context(), targetType);
     if (verdict.level === 'blocked') return { text: `Je ne peux pas ouvrir cette destination. ${verdict.reason || ''}`.trim(), ok: false };
+    if (verdict.level === 'not-found') return { text: verdict.reason, ok: false };
     if (verdict.level === 'confirm' && !this.fullAccess) {
-      const prompt = `Juste pour être sûr(e) : tu veux vraiment ouvrir **${target}** ?`;
-      const confirmation = this.confirmations.create(() => system.openTarget(target, this.context()), prompt, { kind: 'open' });
+      const prompt = `Juste pour être sûr(e) : tu veux vraiment ouvrir l’application **${target}** ?`;
+      const confirmation = this.confirmations.create(() => system.openTarget(target, this.context(), targetType), prompt, { kind: 'open' });
       return { text: prompt, confirmation, ok: true };
     }
-    try { return await system.openTarget(target, this.context()); }
+    try { return await system.openTarget(target, this.context(), targetType); }
     catch (error) { return { text: tone.oops(userFriendlyError(error)), ok: false }; }
   }
 

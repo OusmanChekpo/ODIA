@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
@@ -12,17 +13,46 @@ const WINDOWS_APPS = new Map([
   ['bloc-notes', 'notepad.exe'], ['notepad', 'notepad.exe'],
   ['calculatrice', 'calc.exe'], ['calculator', 'calc.exe'],
   ['explorateur', 'explorer.exe'], ['explorer', 'explorer.exe'],
+  ['word', 'winword.exe'], ['microsoft-word', 'winword.exe'],
+  ['excel', 'excel.exe'], ['microsoft-excel', 'excel.exe'],
+  ['powerpoint', 'powerpnt.exe'], ['microsoft-powerpoint', 'powerpnt.exe'],
+  ['paint', 'mspaint.exe'], ['microsoft-paint', 'mspaint.exe'],
 ]);
 const MAC_APPS = new Map([
   ['bloc-notes', 'TextEdit'], ['notepad', 'TextEdit'],
   ['calculatrice', 'Calculator'], ['calculator', 'Calculator'],
   ['explorateur', 'Finder'], ['explorer', 'Finder'],
+  ['word', 'Microsoft Word'], ['microsoft-word', 'Microsoft Word'],
+  ['excel', 'Microsoft Excel'], ['microsoft-excel', 'Microsoft Excel'],
+  ['powerpoint', 'Microsoft PowerPoint'], ['microsoft-powerpoint', 'Microsoft PowerPoint'],
 ]);
 const LINUX_APPS = new Map([
-  ['bloc-notes', 'gedit'], ['notepad', 'gedit'],
-  ['calculatrice', 'gnome-calculator'], ['calculator', 'gnome-calculator'],
-  ['explorateur', 'xdg-open'], ['explorer', 'xdg-open'],
+  ['bloc-notes', { command: 'gedit', args: [] }], ['notepad', { command: 'gedit', args: [] }],
+  ['calculatrice', { command: 'gnome-calculator', args: [] }], ['calculator', { command: 'gnome-calculator', args: [] }],
+  ['explorateur', { command: 'xdg-open', args: [os.homedir()] }], ['explorer', { command: 'xdg-open', args: [os.homedir()] }],
+  ['word', { command: 'libreoffice', args: ['--writer'] }], ['microsoft-word', { command: 'libreoffice', args: ['--writer'] }],
+  ['excel', { command: 'libreoffice', args: ['--calc'] }], ['microsoft-excel', { command: 'libreoffice', args: ['--calc'] }],
+  ['powerpoint', { command: 'libreoffice', args: ['--impress'] }], ['microsoft-powerpoint', { command: 'libreoffice', args: ['--impress'] }],
 ]);
+const USER_FOLDERS = new Map([
+  ['documents', 'Documents'], ['mes-documents', 'Documents'], ['document', 'Documents'],
+  ['bureau', 'Desktop'], ['desktop', 'Desktop'],
+  ['telechargements', 'Downloads'], ['download', 'Downloads'], ['downloads', 'Downloads'],
+  ['images', 'Pictures'], ['photos', 'Pictures'], ['pictures', 'Pictures'],
+  ['videos', 'Videos'], ['video', 'Videos'], ['musique', 'Music'], ['music', 'Music'],
+]);
+
+function normalizeOpenName(value) {
+  return String(value || '').normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('fr-FR').trim().replace(/\s+/g, '-');
+}
+
+function cleanOpenPath(value) {
+  let result = String(value || '').trim();
+  if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith("'") && result.endsWith("'"))) result = result.slice(1, -1).trim();
+  result = result.replace(/^(?:(?:mon|ma|mes|le|la|les|du|des|de)\s+)+/i, '');
+  result = result.replace(/^(?:dossier|repertoire|fichier|document|classeur)\s+/i, '').trim();
+  return result;
+}
 
 function readableDuration(seconds) {
   let remaining = Math.max(0, Math.floor(seconds));
@@ -136,12 +166,103 @@ function classifyOpenTarget(target, platform = process.platform) {
     if (url.protocol === 'http:' || url.protocol === 'https:') return { level: 'safe', type: 'url' };
     return { level: 'blocked', reason: 'Seules les adresses web HTTP ou HTTPS peuvent être ouvertes.' };
   }
-  const normalized = value.toLocaleLowerCase('fr-FR').replace(/\s+/g, '-');
+  const normalized = normalizeOpenName(value);
   const knownApps = platform === 'win32' ? WINDOWS_APPS : (platform === 'darwin' ? MAC_APPS : LINUX_APPS);
   if (knownApps.has(normalized)) return { level: 'safe', type: 'app' };
   const windowsPath = platform === 'win32' && /^(?:[a-z]:[\\/]|\\\\)/i.test(value);
-  if (path.isAbsolute(value) || windowsPath || value.startsWith('.')) return { level: 'confirm', type: 'path', reason: 'L’ouverture de cette application ou de ce chemin nécessite une confirmation.' };
-  return { level: 'confirm', type: 'app', reason: 'Cette application n’est pas dans la petite liste de raccourcis connus.' };
+  if (path.isAbsolute(value) || windowsPath || value.startsWith('.') || /[\\/]/.test(value)) {
+    return { level: 'confirm', type: 'path', reason: 'L’ouverture de ce chemin doit rester dans la racine autorisée.' };
+  }
+  return { level: 'confirm', type: 'app', reason: 'Cette application n’est pas dans la liste des raccourcis connus.' };
+}
+
+function isLikelyPath(value, targetType, platform) {
+  if (targetType === 'path') return true;
+  if (path.isAbsolute(value) || value.startsWith('.') || /[\\/]/.test(value)) return true;
+  if (platform === 'win32' && /^[a-z]:/i.test(value)) return true;
+  if (USER_FOLDERS.has(normalizeOpenName(cleanOpenPath(value)))) return true;
+  return /\.[a-z0-9]{1,12}$/i.test(value);
+}
+
+function openPathCandidates(target, context = {}, targetType) {
+  const clean = cleanOpenPath(target);
+  const root = path.resolve(context.root || os.homedir());
+  const home = path.resolve(os.homedir());
+  const homeIsAllowed = require('../safety').isWithin(home, root);
+  const platform = context.platform || process.platform;
+  const windowsPath = platform === 'win32' && /^(?:[a-z]:[\\/]|\\\\)/i.test(clean);
+  if (path.isAbsolute(clean) || windowsPath) return [clean];
+  if (clean.startsWith('~')) {
+    const expanded = path.join(home, clean.slice(1).replace(/^[\\/]/, ''));
+    return [expanded];
+  }
+
+  const candidates = [];
+  const add = (candidate) => {
+    if (!candidates.includes(candidate)) candidates.push(candidate);
+  };
+  const segments = clean.split(/[\\/]+/).filter(Boolean);
+  const firstFolder = segments.length ? USER_FOLDERS.get(normalizeOpenName(segments[0])) : null;
+  if (firstFolder) {
+    if (homeIsAllowed) add(path.join(home, firstFolder, ...segments.slice(1)));
+    add(path.resolve(root, firstFolder, ...segments.slice(1)));
+  }
+  const folderAlias = USER_FOLDERS.get(normalizeOpenName(clean));
+  if (folderAlias) {
+    if (homeIsAllowed) add(path.join(home, folderAlias));
+    add(path.resolve(root, folderAlias));
+  }
+  if (homeIsAllowed) add(path.join(home, clean));
+  add(path.resolve(root, clean));
+  if (/\.[a-z0-9]{1,12}$/i.test(clean) && segments.length === 1) {
+    for (const folder of ['Documents', 'Desktop', 'Downloads']) {
+      if (homeIsAllowed) add(path.join(home, folder, clean));
+      add(path.resolve(root, folder, clean));
+    }
+  }
+  return candidates;
+}
+
+async function findOpenPath(target, context = {}, targetType) {
+  const candidates = openPathCandidates(target, context, targetType);
+  for (const candidate of candidates) {
+    const safePath = await resolveSafePath(candidate, { root: context.root, fullAccess: context.fullAccess });
+    try {
+      const stat = await fs.stat(safePath);
+      if (stat.isFile() || stat.isDirectory()) return { path: safePath, stat };
+    } catch (error) {
+      if (error && error.code === 'ENOENT') continue;
+      throw error;
+    }
+  }
+  return null;
+}
+
+async function classifyOpenTargetAsync(target, context = {}, targetType) {
+  const value = String(target || '').trim();
+  const platform = context.platform || process.platform;
+  const initial = classifyOpenTarget(value, platform);
+  if (initial.level === 'blocked' || initial.type === 'url') return initial;
+  if (targetType !== 'path' && initial.type === 'app' && initial.level === 'safe') return initial;
+
+  try {
+    const match = await findOpenPath(value, context, targetType);
+    if (match) {
+      const executableFile = !match.stat.isDirectory() && /\.(?:exe|com|bat|cmd|ps1|msi|scr|lnk|sh|command|appimage|desktop)$/i.test(match.path);
+      if (executableFile) return { level: 'confirm', type: 'path', path: match.path, isDirectory: false, reason: 'L’ouverture d’un programme ou script demande une confirmation.' };
+      return { level: 'safe', type: 'path', path: match.path, isDirectory: match.stat.isDirectory() };
+    }
+  } catch (error) {
+    if (error && /sort du dossier autorisé|en dehors du dossier autorisé|lien symbolique/i.test(error.message)) {
+      return { level: 'blocked', type: 'path', reason: error.message };
+    }
+    if (error && error.code !== 'ENOENT') return { level: 'blocked', type: 'path', reason: 'Je ne peux pas accéder à ce chemin avec les droits actuels.' };
+  }
+
+  if (isLikelyPath(value, targetType, platform)) {
+    return { level: 'not-found', type: 'path', reason: `Je ne trouve pas « ${cleanOpenPath(value)} » dans la racine autorisée.` };
+  }
+  return initial;
 }
 
 function launchDetached(executable, args, options = {}) {
@@ -155,12 +276,12 @@ function launchDetached(executable, args, options = {}) {
   });
 }
 
-async function openTarget(target, context = {}) {
+async function openTarget(target, context = {}, targetType) {
   const value = String(target || '').trim();
-  const classification = classifyOpenTarget(value, context.platform || process.platform);
-  if (classification.level === 'blocked') throw new Error(classification.reason);
-
   const platform = context.platform || process.platform;
+  const classification = await classifyOpenTargetAsync(value, context, targetType);
+  if (classification.level === 'blocked' || classification.level === 'not-found') throw new Error(classification.reason);
+
   if (classification.type === 'url') {
     const safeUrl = new URL(value).href;
     if (platform === 'win32') {
@@ -174,22 +295,22 @@ async function openTarget(target, context = {}) {
   }
 
   if (classification.type === 'path') {
-    const filePath = await resolveSafePath(value, { root: context.root, fullAccess: context.fullAccess });
-    if (platform === 'win32') await launchDetached('explorer.exe', [filePath]);
-    else if (platform === 'darwin') await launchDetached('open', [filePath]);
-    else await launchDetached('xdg-open', [filePath]);
-    return { text: `Voilà, j’ouvre **${value}**. 👌` };
+    if (platform === 'win32') await launchDetached('explorer.exe', [classification.path]);
+    else if (platform === 'darwin') await launchDetached('open', [classification.path]);
+    else await launchDetached('xdg-open', [classification.path]);
+    const display = path.relative(context.root || os.homedir(), classification.path).split(path.sep).join('/') || path.basename(classification.path);
+    const object = classification.isDirectory ? 'dossier' : 'document';
+    return { text: `J’ouvre le ${object} **${display}** avec l’application associée. 👌` };
   }
 
-  const normalized = value.toLocaleLowerCase('fr-FR').replace(/\s+/g, '-');
+  const normalized = normalizeOpenName(value);
   if (platform === 'win32' && WINDOWS_APPS.has(normalized)) {
     await launchDetached(WINDOWS_APPS.get(normalized), []);
   } else if (platform === 'darwin' && MAC_APPS.has(normalized)) {
     await launchDetached('open', ['-a', MAC_APPS.get(normalized)]);
   } else if (platform !== 'win32' && platform !== 'darwin' && LINUX_APPS.has(normalized)) {
     const application = LINUX_APPS.get(normalized);
-    const args = application === 'xdg-open' ? [context.root || os.homedir()] : [];
-    await launchDetached(application, args);
+    await launchDetached(application.command, application.args);
   } else {
     // Une application inconnue n’est lancée qu’après validation explicite dans executor.js.
     await launchDetached(value, []);
@@ -197,4 +318,4 @@ async function openTarget(target, context = {}) {
   return { text: `Voilà, j’ai lancé **${value}**. 👌` };
 }
 
-module.exports = { systemStatus, listProcesses, runCommand, classifyOpenTarget, openTarget, readableDuration };
+module.exports = { systemStatus, listProcesses, runCommand, classifyOpenTarget, classifyOpenTargetAsync, openTarget, readableDuration };

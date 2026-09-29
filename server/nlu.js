@@ -114,7 +114,11 @@ function parseOne(input) {
   if (match) return { intent: 'system.processes', original, slots: {} };
   match = matched('^(?:execute|lance)\\s+(?:la\\s+)?commande\\s+(?<command>[\\s\\S]+)$', data);
   if (match) return { intent: 'system.command', original, slots: { command: capture(match, 'command', data) } };
-  match = matched('^ouvre\\s+(?<target>.+)$', data);
+  match = matched('^(?:ouvre|ouvrir|lance)\\s+(?:(?:le|un|une|mon|ma|mes|les)\\s+)?(?:dossier|repertoire)\\s+(?<target>.+)$', data);
+  if (match) return { intent: 'system.open', original, slots: { target: clean(capture(match, 'target', data)), targetType: 'path' } };
+  match = matched('^(?:ouvre|ouvrir|lance)\\s+(?:(?:le|un|une|mon|ma|mes|les)\\s+)?(?:fichier|document|classeur|feuille\\s+de\\s+calcul)\\s+(?<target>.+)$', data);
+  if (match) return { intent: 'system.open', original, slots: { target: clean(capture(match, 'target', data)), targetType: 'path' } };
+  match = matched('^(?:ouvre|ouvrir|lance)\\s+(?<target>.+)$', data);
   if (match) return { intent: 'system.open', original, slots: { target: clean(capture(match, 'target', data)) } };
 
   match = matched('^(?:meteo|temps)\\s+(?:a|pour)\\s+(?<city>.+)$', data);

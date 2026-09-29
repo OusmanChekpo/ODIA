@@ -78,7 +78,7 @@ async function createApp(options = {}) {
     const baseHeaders = {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
-      'Permissions-Policy': 'microphone=(self)',
+      'Permissions-Policy': 'microphone=(self), on-device-speech-recognition=(self)',
     };
     try {
       const url = new URL(request.url || '/', 'http://nikous.local');

@@ -45,6 +45,7 @@ Windows lancera alors NIKOUS à l’ouverture de ta session. Tu peux retirer le 
 - `liste les fichiers` · `lis compte-rendu.txt` · `crée dossier Archives`
 - `crée fichier idées.txt avec appeler le garage demain`
 - `état du système` · `liste des processus` · `quelle heure est-il`
+- `ouvre le dossier Documents` · `ouvre le document devis.xlsx` · `ouvre Word` · `ouvre Excel`
 - `calcule sqrt(81) + pi` · `note : acheter du café` · `mes notes`
 - `rappelle-moi dans 20 minutes de faire une pause`
 - `chaque lundi à 09:00 : état du système`
@@ -67,9 +68,11 @@ Les confirmations restent visibles pour les commandes hors liste blanche quand l
 
 ## 6. Microphone et voix
 
-Le bouton 🎙 demande l’autorisation du microphone et transcrit en français. Chrome et Microsoft Edge sont recommandés. Si Windows ou le navigateur bloque l’accès, ouvre les paramètres du site via l’icône de cadenas près de l’adresse, autorise le microphone, puis réessaie. Dans un aperçu intégré, utilise **Ouvrir dans un nouvel onglet**.
+Le bouton 🎙 démarre une conversation : parle, NIKOUS transcrit ta phrase localement, répond à voix haute, puis se remet à l’écoute. Arrête la session en retouchant le bouton ⏹. Le navigateur ne transmet pas ta voix à un service cloud.
 
-La lecture des réponses est facultative : active **Réponses vocales** dans la barre latérale. Elle s’appuie sur les voix déjà présentes dans Windows et le navigateur.
+Chrome récent est recommandé pour la reconnaissance intégralement sur l’appareil. Au premier démarrage vocal, le navigateur peut demander l’autorisation d’installer le pack français fr-FR ; le téléchargement est unique et, une fois le pack installé, la reconnaissance fonctionne hors ligne. Si tu refuses ou si le navigateur ne propose pas cette fonction locale, NIKOUS n’utilisera pas de transcription distante.
+
+Pour parler, autorise le microphone dans la fenêtre du navigateur. Si nécessaire, ouvre les paramètres du site via l’icône de cadenas près de l’adresse. Dans un aperçu intégré, utilise **Ouvrir dans un nouvel onglet**. La synthèse vocale sélectionne uniquement une voix française installée localement ; si aucune voix n’est disponible, ajoute une voix française dans les paramètres de parole de Windows. Le bouton **Réponses vocales locales** active aussi la lecture lors des conversations écrites.
 
 ## 7. Dépannage
 
@@ -77,8 +80,8 @@ La lecture des réponses est facultative : active **Réponses vocales** dans la 
 - **Le port 3000 est déjà utilisé** : ferme l’autre serveur, ou arrête NIKOUS avec `Arreter-NIKOUS.bat`, puis relance-le.
 - **« Node.js 18+ est requis »** : installe ou mets à jour la version LTS depuis <https://nodejs.org/>, puis ouvre une nouvelle session Windows.
 - **Un fichier n’est pas trouvé** : vérifie son nom et son emplacement sous `C:\Users`. Les chemins extérieurs sont bloqués en mode sûr.
-- **La météo ne répond pas** : seule cette fonction a besoin d’Internet (service Open-Meteo). Les fichiers, calculs, notes et rappels restent disponibles hors ligne.
-- **Le microphone ne fonctionne pas** : vérifie les autorisations Windows et navigateur, puis essaie dans Chrome ou Edge hors iframe.
+- **La météo ne répond pas** : cette fonction utilise Internet (Open-Meteo). La connexion est aussi nécessaire une seule fois si Chrome doit télécharger le pack fr-FR local ; ensuite la conversation vocale fonctionne hors ligne. Les fichiers, calculs, notes et rappels restent locaux.
+- **La conversation vocale locale ne démarre pas** : utilise Chrome à jour, autorise le microphone, puis accepte le pack fr-FR si le navigateur te le propose. Si aucune voix locale française n’est disponible, installe-la dans les paramètres de parole de Windows. NIKOUS ne basculera jamais vers la reconnaissance cloud.
 - **Le démarrage administrateur indique qu’une instance existe déjà** : arrête-la d’abord avec `Arreter-NIKOUS.bat`, puis relance le kit administrateur.
 
 ## 8. Mettre à jour NIKOUS en gardant tes données

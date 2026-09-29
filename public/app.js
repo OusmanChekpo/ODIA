@@ -8,7 +8,17 @@
   const typing = $('#typing-indicator');
   const voiceHint = $('#voice-hint');
   const toastStack = $('#toast-stack');
-  const state = { busy: false, settings: null, eventSource: null, recognition: null };
+  const state = {
+    busy: false,
+    settings: null,
+    eventSource: null,
+    recognition: null,
+    recognitionConstructor: null,
+    voiceConversation: false,
+    voiceStarting: false,
+    voiceSpeaking: false,
+    voiceRestartTimer: null,
+  };
 
   function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -197,20 +207,46 @@
     return result;
   }
 
-  async function sendMessage(value = input.value) {
+  async function sendMessage(value = input.value, options = {}) {
     const message = String(value || '').trim();
     if (!message || state.busy) return;
+    if (state.recognition) {
+      const currentRecognition = state.recognition;
+      state.recognition = null;
+      try { currentRecognition.abort(); } catch { /* écoute déjà terminée */ }
+    }
     appendMessage('user', message);
     input.value = '';
     resizeInput();
     setBusy(true);
+    if (options.fromVoice && state.voiceConversation) showVoiceHint('Demande reconnue sur cet appareil. Je prépare ma réponse localement…');
+    let responseText = '';
     try {
       const result = await postJson('/api/chat', { message });
-      appendMessage('assistant', result.text || 'C’est fait.', result.blocks || [], { confirmation: result.confirmation });
+      responseText = result.text || 'C’est fait.';
+      appendMessage('assistant', responseText, result.blocks || [], {
+        confirmation: result.confirmation,
+        noSpeech: state.voiceConversation,
+      });
     } catch (error) {
-      appendMessage('assistant', `Oups, je n’arrive pas à joindre NIKOUS. Vérifie que le serveur local est bien démarré, puis réessaie. (${error.message || 'connexion impossible'})`);
+      responseText = `Oups, je n’arrive pas à joindre NIKOUS. Vérifie que le serveur local est bien démarré, puis réessaie. (${error.message || 'connexion impossible'})`;
+      appendMessage('assistant', responseText, [], { noSpeech: state.voiceConversation });
     } finally {
       setBusy(false);
+    }
+
+    if (state.voiceConversation) {
+      state.voiceSpeaking = true;
+      $('#voice-button').classList.add('is-speaking');
+      showVoiceHint('Je te réponds avec la voix française locale…');
+      const spoke = await speak(responseText, { force: true });
+      state.voiceSpeaking = false;
+      $('#voice-button').classList.remove('is-speaking');
+      if (state.voiceConversation && !spoke) {
+        stopVoiceConversation(false);
+        showVoiceHint('La réponse n’a pas pu être lue par la voix locale. Vérifie que la synthèse vocale française de l’appareil est disponible ; aucune voix en ligne ne sera utilisée.');
+      } else if (state.voiceConversation) scheduleRecognition(350);
+    } else if (!options.fromVoice) {
       input.focus();
     }
   }
@@ -277,24 +313,68 @@
     }
   }
 
-  function speak(text) {
-    if (!('speechSynthesis' in window) || !localStorageGet('nikous-voice')) return;
+  function getLocalFrenchVoice() {
+    if (!('speechSynthesis' in window)) return null;
+    return window.speechSynthesis.getVoices().find((voice) => voice.localService === true && voice.lang.toLowerCase().startsWith('fr')) || null;
+  }
+
+  function waitForLocalFrenchVoice(timeoutMs = 1200) {
+    const current = getLocalFrenchVoice();
+    if (current) return Promise.resolve(current);
+    if (!('speechSynthesis' in window) || typeof window.speechSynthesis.addEventListener !== 'function') return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let finished = false;
+      const complete = () => {
+        if (finished) return;
+        finished = true;
+        window.speechSynthesis.removeEventListener('voiceschanged', check);
+        clearTimeout(timer);
+        resolve(getLocalFrenchVoice());
+      };
+      const check = () => { if (getLocalFrenchVoice()) complete(); };
+      const timer = setTimeout(complete, timeoutMs);
+      window.speechSynthesis.addEventListener('voiceschanged', check);
+    });
+  }
+
+  function speak(text, options = {}) {
+    if (!('speechSynthesis' in window) || (!options.force && localStorageGet('nikous-voice') !== 'true')) return Promise.resolve(false);
+    const frenchVoice = getLocalFrenchVoice();
+    if (!frenchVoice) {
+      showVoiceHint('Aucune voix française installée localement n’est disponible. Installe une voix française dans les paramètres de parole de ton système ; NIKOUS n’utilisera pas de voix en ligne.', false);
+      return Promise.resolve(false);
+    }
     window.speechSynthesis.cancel();
     const spoken = String(text).replace(/```[\s\S]*?```/g, ' bloc de code ').replace(/[*_`#]/g, '').replace(/https?:\/\/\S+/g, 'un lien web');
     const utterance = new SpeechSynthesisUtterance(spoken.slice(0, 1600));
     utterance.lang = 'fr-FR';
-    const frenchVoice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith('fr'));
-    if (frenchVoice) utterance.voice = frenchVoice;
+    utterance.voice = frenchVoice;
     utterance.rate = 1;
-    window.speechSynthesis.speak(utterance);
+    return new Promise((resolve) => {
+      let finished = false;
+      const finish = (success) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(fallback);
+        resolve(success);
+      };
+      utterance.onend = () => finish(true);
+      utterance.onerror = () => finish(false);
+      const fallback = setTimeout(() => finish(false), Math.max(10_000, spoken.length * 95));
+      try { window.speechSynthesis.speak(utterance); } catch { finish(false); }
+    });
   }
 
-  function toggleSpeech() {
+  async function toggleSpeech() {
     const enabled = localStorageGet('nikous-voice') !== 'true';
+    if (enabled && !(await waitForLocalFrenchVoice())) {
+      showVoiceHint('Aucune voix française locale n’est disponible. Installe une voix française dans les paramètres de parole de ton système ; les voix en ligne ne seront pas utilisées.', false);
+      return;
+    }
     localStorageSet('nikous-voice', String(enabled));
     $('#speech-toggle').setAttribute('aria-pressed', String(enabled));
     if (!enabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
-    showToast(enabled ? 'Réponses vocales activées' : 'Réponses vocales désactivées', enabled ? 'NIKOUS lira ses réponses avec la voix française disponible dans ton navigateur.' : 'Les réponses restent affichées à l’écran.', false);
+    showToast(enabled ? 'Voix locale activée' : 'Voix locale désactivée', enabled ? 'Les réponses seront lues avec une voix française installée sur cet appareil.' : 'Les réponses restent affichées à l’écran.', false);
   }
 
   function showToast(title, message, warning = false) {
@@ -348,13 +428,19 @@
     if (prompt.trim() && !/\s$/.test(prompt)) sendMessage(prompt);
   }
 
+  function isInsideFrame() {
+    try { return window.self !== window.top; } catch { return true; }
+  }
+
   function voiceErrorMessage(error, insideFrame) {
     const errorName = error && error.name;
-    if (insideFrame) return 'La reconnaissance vocale peut être bloquée dans l’aperçu intégré. Ouvre NIKOUS dans un nouvel onglet, puis autorise le microphone. Chrome et Edge sont recommandés.';
+    if (error && error.message && errorName === 'LocalSpeechError') return error.message;
+    if (insideFrame && (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError' || errorName === 'SecurityError')) return 'L’aperçu intégré bloque peut-être le microphone. Ouvre NIKOUS dans un nouvel onglet, puis autorise le micro dans Chrome ou Edge.';
     if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError' || errorName === 'SecurityError') return 'L’accès au microphone est refusé. Dans Chrome ou Edge, clique sur le cadenas près de l’adresse, autorise le microphone pour cette page, puis réessaie.';
     if (errorName === 'NotFoundError' || errorName === 'DevicesNotFoundError') return 'Je ne détecte pas de microphone. Branche ou active un micro, puis réessaie.';
     if (errorName === 'NotReadableError') return 'Le microphone semble déjà utilisé par une autre application. Ferme-la et réessaie.';
-    return 'La reconnaissance vocale n’est pas disponible. Vérifie les autorisations du navigateur et essaie avec Chrome ou Edge.';
+    if (errorName === 'language-not-supported' || errorName === 'LanguageNotSupportedError') return 'Le modèle local français n’est pas installé. Vérifie que le pack fr-FR est disponible dans ton navigateur ; NIKOUS ne basculera pas vers une reconnaissance en ligne.';
+    return error && error.message ? error.message : 'La conversation vocale locale n’est pas disponible. Essaie avec une version récente de Chrome et un pack vocal français installé.';
   }
 
   function showVoiceHint(message, includeOpenButton = false) {
@@ -372,45 +458,197 @@
     voiceHint.hidden = false;
   }
 
-  async function startVoiceInput() {
+  function updateVoiceButton() {
+    const button = $('#voice-button');
+    button.textContent = state.voiceConversation ? '⏹' : '🎙';
+    button.classList.toggle('is-conversation', state.voiceConversation);
+    button.setAttribute('aria-pressed', String(state.voiceConversation));
+    button.setAttribute('aria-label', state.voiceConversation ? 'Arrêter la conversation vocale locale' : 'Démarrer la conversation vocale locale');
+    button.title = state.voiceConversation ? 'Arrêter la conversation audio locale' : 'Parler à NIKOUS en audio, sans service cloud';
+  }
+
+  function stopVoiceConversation(showNotice = true) {
+    state.voiceConversation = false;
+    state.voiceStarting = false;
+    state.voiceSpeaking = false;
+    if (state.voiceRestartTimer) clearTimeout(state.voiceRestartTimer);
+    state.voiceRestartTimer = null;
+    const recognition = state.recognition;
+    state.recognition = null;
+    if (recognition) { try { recognition.abort(); } catch { /* déjà arrêté */ } }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    $('#voice-button').classList.remove('is-listening', 'is-speaking');
+    updateVoiceButton();
     voiceHint.hidden = true;
-    const insideFrame = (() => { try { return window.self !== window.top; } catch { return true; } })();
-    if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-      showVoiceHint('Le micro nécessite une page sécurisée. Ouvre NIKOUS sur localhost, ou utilise Chrome / Edge avec HTTPS.', insideFrame);
-      return;
-    }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showVoiceHint('Ce navigateur ne donne pas accès au microphone. Essaie avec Chrome ou Edge.', insideFrame);
-      return;
-    }
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-    } catch (error) {
-      showVoiceHint(voiceErrorMessage(error, insideFrame), insideFrame);
-      return;
-    }
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) {
-      showVoiceHint('Le micro est autorisé, mais la reconnaissance vocale n’est pas prise en charge ici. Chrome ou Edge offrent la meilleure compatibilité.', insideFrame);
-      return;
-    }
-    if (state.recognition) state.recognition.abort();
-    const recognition = new Recognition();
+    if (showNotice) showToast('Conversation vocale arrêtée', 'Le microphone n’est plus écouté par NIKOUS.', false);
+  }
+
+  function scheduleRecognition(delay = 400) {
+    if (state.voiceRestartTimer) clearTimeout(state.voiceRestartTimer);
+    state.voiceRestartTimer = setTimeout(() => {
+      state.voiceRestartTimer = null;
+      startLocalRecognition();
+    }, delay);
+  }
+
+  function startLocalRecognition() {
+    if (!state.voiceConversation || state.busy || state.voiceSpeaking || state.voiceStarting || !state.recognitionConstructor) return;
+    const recognition = new state.recognitionConstructor();
     state.recognition = recognition;
     recognition.lang = 'fr-FR';
     recognition.interimResults = false;
+    recognition.continuous = false;
     recognition.maxAlternatives = 1;
-    recognition.onstart = () => $('#voice-button').classList.add('is-listening');
-    recognition.onend = () => $('#voice-button').classList.remove('is-listening');
-    recognition.onerror = (event) => showVoiceHint(voiceErrorMessage({ name: event.error === 'not-allowed' ? 'NotAllowedError' : event.error }, insideFrame), insideFrame);
-    recognition.onresult = (event) => {
-      const transcript = event.results && event.results[0] && event.results[0][0] && event.results[0][0].transcript;
-      if (transcript) { input.value = transcript; resizeInput(); input.focus(); }
+    let receivedSpeech = false;
+    recognition.onstart = () => {
+      if (!state.voiceConversation) return;
+      $('#voice-button').classList.add('is-listening');
+      showVoiceHint('Je t’écoute en français. La reconnaissance et la réponse restent sur cet appareil ; parle naturellement, puis je te répondrai à voix haute.');
     };
-    try { recognition.start(); }
-    catch (error) { showVoiceHint(voiceErrorMessage(error, insideFrame), insideFrame); }
+    recognition.onresult = (event) => {
+      const result = event.results && event.results[0];
+      const transcript = result && result[0] && result[0].transcript;
+      if (transcript && transcript.trim()) {
+        receivedSpeech = true;
+        sendMessage(transcript, { fromVoice: true });
+      }
+    };
+    recognition.onerror = (event) => {
+      if (event.error === 'aborted') return;
+      if (event.error === 'no-speech') {
+        showVoiceHint('Je n’ai rien entendu cette fois. Je reste à l’écoute — tu peux parler quand tu veux.');
+        return;
+      }
+      const localError = event.error === 'language-not-supported' ? new Error(voiceErrorMessage({ name: event.error }, false)) : new Error(`Le moteur de reconnaissance locale a signalé une erreur (${event.error}). Aucune transcription en ligne ne sera utilisée.`);
+      if (event.error === 'language-not-supported') localError.name = 'LocalSpeechError';
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') localError.name = 'NotAllowedError';
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'language-not-supported') {
+        stopVoiceConversation(false);
+        const insideFrame = isInsideFrame();
+        showVoiceHint(voiceErrorMessage(localError, insideFrame), insideFrame && localError.name === 'NotAllowedError');
+      } else {
+        stopVoiceConversation(false);
+        showVoiceHint(localError.message);
+      }
+    };
+    recognition.onend = () => {
+      if (state.recognition === recognition) state.recognition = null;
+      $('#voice-button').classList.remove('is-listening');
+      if (state.voiceConversation && !state.busy && !state.voiceSpeaking) scheduleRecognition(receivedSpeech ? 350 : 650);
+    };
+    try {
+      recognition.processLocally = true;
+      if (recognition.processLocally !== true) throw new Error('Le navigateur ne garantit pas le traitement local ; la reconnaissance est arrêtée sans connexion au cloud.');
+      recognition.start();
+    } catch (error) {
+      if (state.recognition === recognition) state.recognition = null;
+      const wrapped = new Error(error.message || 'Impossible de démarrer le moteur vocal local.');
+      wrapped.name = error.name || 'LocalSpeechError';
+      stopVoiceConversation(false);
+      const insideFrame = isInsideFrame();
+      showVoiceHint(voiceErrorMessage(wrapped, insideFrame), insideFrame && ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(wrapped.name));
+    }
+  }
+
+  async function installLocalFrenchPack(Recognition) {
+    if (typeof Recognition.available !== 'function' || typeof Recognition.install !== 'function') {
+      const error = new Error('Ce navigateur ne propose pas la reconnaissance locale à la demande. Utilise une version récente de Chrome ; NIKOUS n’enverra jamais ta voix à un service cloud.');
+      error.name = 'LocalSpeechError';
+      throw error;
+    }
+    const options = { langs: ['fr-FR'], processLocally: true };
+    let availability;
+    try { availability = await Recognition.available(options); }
+    catch {
+      const error = new Error('Le navigateur ne permet pas de vérifier le pack de reconnaissance locale fr-FR. Ouvre NIKOUS dans Chrome à jour et réessaie.');
+      error.name = 'LocalSpeechError';
+      throw error;
+    }
+    if (availability === 'available') return true;
+    if (availability !== 'downloadable' && availability !== 'downloading') {
+      const error = new Error('Le navigateur ne dispose pas d’un modèle de reconnaissance française utilisable hors ligne. Aucun moteur distant ne sera appelé. Essaie avec Chrome à jour.');
+      error.name = 'LocalSpeechError';
+      throw error;
+    }
+    const accepted = window.confirm('Pour utiliser la voix en local, le navigateur doit installer une fois le pack français fr-FR sur cet appareil. Le micro ne sera pas envoyé à un service de transcription. Télécharger ce pack ?');
+    if (!accepted) return false;
+    showVoiceHint('Installation du modèle vocal français local… Le navigateur télécharge le pack une seule fois.');
+    let installed = false;
+    try { installed = await Recognition.install(options); } catch { installed = false; }
+    if (!installed) {
+      const error = new Error('Le pack fr-FR n’a pas pu être installé. Vérifie la connexion, puis réessaie ; aucune reconnaissance en ligne ne sera utilisée.');
+      error.name = 'LocalSpeechError';
+      throw error;
+    }
+    if (await Recognition.available(options) !== 'available') {
+      const error = new Error('Le pack fr-FR n’est pas encore prêt. Réessaie dans un instant.');
+      error.name = 'LocalSpeechError';
+      throw error;
+    }
+    return true;
+  }
+
+  async function startVoiceConversation() {
+    if (state.voiceConversation) { stopVoiceConversation(); return; }
+    if (state.voiceStarting) return;
+    state.voiceStarting = true;
+    const button = $('#voice-button');
+    button.disabled = true;
+    voiceHint.hidden = true;
+    const insideFrame = isInsideFrame();
+    try {
+      if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+        const error = new Error('Le microphone exige une page sécurisée (HTTPS ou localhost).');
+        error.name = 'LocalSpeechError';
+        throw error;
+      }
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Recognition) {
+        const error = new Error('Ce navigateur ne prend pas en charge la reconnaissance vocale locale. Essaie avec une version récente de Chrome ; NIKOUS ne basculera pas vers un service en ligne.');
+        error.name = 'LocalSpeechError';
+        throw error;
+      }
+      const probe = new Recognition();
+      if (!('processLocally' in probe)) {
+        const error = new Error('La version du navigateur ne sait pas garantir une reconnaissance locale. Mets Chrome à jour ; NIKOUS refusera d’envoyer l’audio au cloud.');
+        error.name = 'LocalSpeechError';
+        throw error;
+      }
+      if (!('speechSynthesis' in window) || !(await waitForLocalFrenchVoice())) {
+        const error = new Error('Aucune voix française locale n’est installée pour lire les réponses. Installe une voix française dans les paramètres de parole de ton système, puis réessaie.');
+        error.name = 'LocalSpeechError';
+        throw error;
+      }
+      const packReady = await installLocalFrenchPack(Recognition);
+      if (!packReady) {
+        showVoiceHint('D’accord, le pack fr-FR n’a pas été installé. La conversation audio reste arrêtée et aucune voix ne sera envoyée en ligne.');
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const error = new Error('Le navigateur ne donne pas accès au microphone. Essaie avec Chrome à jour.');
+        error.name = 'LocalSpeechError';
+        throw error;
+      }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (error) {
+        throw error;
+      }
+      state.recognitionConstructor = Recognition;
+      state.voiceConversation = true;
+      updateVoiceButton();
+      showToast('Conversation vocale locale activée', 'Parle naturellement : ta voix sera reconnue sur cet appareil et NIKOUS te répondra à voix haute.', false);
+      showVoiceHint('Conversation vocale locale prête. Parle quand tu veux ; touche ⏹ pour arrêter.');
+      scheduleRecognition(150);
+    } catch (error) {
+      showVoiceHint(voiceErrorMessage(error, insideFrame), insideFrame && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError' || error.name === 'SecurityError'));
+    } finally {
+      state.voiceStarting = false;
+      button.disabled = false;
+      updateVoiceButton();
+    }
   }
 
   async function loadHistoryOrWelcome() {
@@ -449,7 +687,7 @@
       if (event.target.closest('[data-prompt]')) { handlePromptClick(event); return; }
       prefillFile(event);
     });
-    $('#voice-button').addEventListener('click', startVoiceInput);
+    $('#voice-button').addEventListener('click', startVoiceConversation);
     loadSettings();
     loadHistoryOrWelcome();
     connectEvents();
