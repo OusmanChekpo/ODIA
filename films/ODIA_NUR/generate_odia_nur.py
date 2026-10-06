@@ -43,7 +43,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 # CONFIG CRÉATIVE — tout le film se pilote ici
 # --------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "out"
+OUT = ROOT / "delivery"   # dossier de livraison (persistant, non exclu des snapshots)
 VO_DIR = ROOT / "vo"
 
 FPS = 30

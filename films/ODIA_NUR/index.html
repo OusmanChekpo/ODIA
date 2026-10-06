@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ODIA — NŪR / La Lumière Structurée · NICHOLSON</title>
+<style>
+  :root{
+    --bg:#06090b; --gold:#e9ba54; --gold-hi:#fae096; --ivory:#f5f0e7; --em:#227662;
+  }
+  *{box-sizing:border-box; margin:0}
+  body{
+    background:radial-gradient(1200px 700px at 50% 30%, #0d1315 0%, var(--bg) 70%);
+    color:var(--ivory); font-family:'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    min-height:100vh; padding:48px 20px 80px;
+  }
+  header{max-width:1080px; margin:0 auto 28px; text-align:center}
+  .kicker{letter-spacing:.42em; font-size:11px; color:var(--gold); text-transform:uppercase}
+  h1{font-size:clamp(34px,6vw,64px); letter-spacing:.28em; font-weight:800; margin:10px 0 6px; text-indent:.28em}
+  .tag{color:var(--gold); letter-spacing:.34em; font-size:12px; text-transform:uppercase}
+  .rule{width:220px; height:1px; background:var(--gold); margin:18px auto; position:relative}
+  .rule::after{content:""; position:absolute; left:50%; top:-3.5px; width:7px; height:7px;
+    background:var(--gold); transform:translateX(-50%) rotate(45deg)}
+  main{max-width:1080px; margin:0 auto}
+  .screen{
+    border:1px solid rgba(233,186,84,.35); padding:10px; background:#000;
+    box-shadow:0 0 60px rgba(233,186,84,.12), 0 30px 80px rgba(0,0,0,.6);
+  }
+  video{display:block; width:100%; aspect-ratio:16/9; background:#000}
+  .meta{display:flex; flex-wrap:wrap; gap:10px 26px; justify-content:center;
+    margin:20px 0 40px; font-size:12px; letter-spacing:.14em; color:#9aa5a3}
+  .meta b{color:var(--gold-hi); font-weight:600}
+  h2{font-size:12px; letter-spacing:.4em; color:var(--gold); text-transform:uppercase;
+    text-align:center; margin:0 0 18px}
+  .board{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px}
+  .board figure{border:1px solid rgba(233,186,84,.22); padding:6px; background:#000}
+  .board img{display:block; width:100%}
+  .board figcaption{font-size:10px; letter-spacing:.22em; color:#8b9694; padding:7px 4px 2px;
+    text-transform:uppercase; text-align:center}
+  footer{max-width:1080px; margin:56px auto 0; text-align:center; font-size:11px;
+    letter-spacing:.3em; color:#5f6a68; text-transform:uppercase}
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Nicholson · Studio Motion</div>
+  <h1>ODIA</h1>
+  <div class="tag">Nūr — La Lumière Structurée</div>
+  <div class="rule"></div>
+</header>
+<main>
+  <div class="screen">
+    <video controls preload="metadata" playsinline
+           src="delivery/ODIA_NUR_FINAL.mp4"></video>
+  </div>
+  <div class="meta">
+    <span><b>16:9</b> cinématique</span><span><b>1920×1080</b></span>
+    <span><b>30 fps</b></span><span><b>26 s</b></span>
+    <span>audio : <b>sound design + voix off</b> (zéro musique)</span>
+  </div>
+
+  <h2>Storyboard — plans clés</h2>
+  <div class="board">
+    <figure><img src="assets/stills/s1.jpg" alt=""><figcaption>01 · Le souffle</figcaption></figure>
+    <figure><img src="assets/stills/s2.jpg" alt=""><figcaption>02 · Le tracé</figcaption></figure>
+    <figure><img src="assets/stills/s3.jpg" alt=""><figcaption>03 · Rosace khatam</figcaption></figure>
+    <figure><img src="assets/stills/s4.jpg" alt=""><figcaption>04 · La tessellation</figcaption></figure>
+    <figure><img src="assets/stills/s5.jpg" alt=""><figcaption>05 · L'implosion</figcaption></figure>
+    <figure><img src="assets/stills/s6.jpg" alt=""><figcaption>06 · Le noyau</figcaption></figure>
+    <figure><img src="assets/stills/s7.jpg" alt=""><figcaption>07 · La signature</figcaption></figure>
+    <figure><img src="assets/key_visual.jpg" alt=""><figcaption>Key visual DA</figcaption></figure>
+  </div>
+</main>
+<footer>Nous ne faisons pas des vidéos. Nous structurons la lumière.</footer>
+</body>
+</html>

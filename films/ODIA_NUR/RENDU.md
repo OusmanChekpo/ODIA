@@ -48,7 +48,7 @@ puis la multitude s'effondre en une seule signature : **ODIA**.
 | Déclinaisons | — | `--res 1280` préviz, `--frames-only` séquence PNG pour AE/Nuke/Runway img2vid |
 
 Le script est **portable** : `python3 generate_odia_nur.py` (numpy + Pillow +
-ffmpeg, ou imageio-ffmpeg). Sortie : `out/ODIA_NUR_FINAL.mp4`.
+ffmpeg, ou imageio-ffmpeg). Sortie : `delivery/ODIA_NUR_FINAL.mp4`.
 
 ## 4. AMBIANCE SONORE — SILENCE & MATIÈRE (aucune musique)
 
@@ -126,7 +126,7 @@ reste aniconique et sans musique.
 
 - `generate_odia_nur.py` — le « prompt Python » : moteur complet, portable,
   déterministe (vidéo + sound design + mixage).
-- `out/ODIA_NUR_FINAL.mp4` — le film final 1080p mixé (VO + sound design).
+- `delivery/ODIA_NUR_FINAL.mp4` — le film final 1080p mixé (VO + sound design).
 - `assets/key_visual.jpg` — key visual de direction artistique.
 - `vo/` — voix off (remplaçables par une prise studio, mêmes timings).
 - `--frames-only` — séquence PNG pour compositing AE / Nuke ou img2vid Runway.

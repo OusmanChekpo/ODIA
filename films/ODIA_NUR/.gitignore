@@ -1,7 +1,7 @@
 # Fichiers de travail / intermédiaires de rendu — non livrés au Git
 preview/
 render_log.txt
-out/frames/
-out/ODIA_NUR_video_only.mp4
-out/ODIA_NUR_sounddesign.wav
+delivery/frames/
+delivery/ODIA_NUR_video_only.mp4
+delivery/ODIA_NUR_sounddesign.wav
 __pycache__/
