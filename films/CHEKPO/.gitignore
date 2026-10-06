@@ -1,0 +1,4 @@
+render_log.txt
+__pycache__/
+delivery/_tmp_*.mp4
+delivery/_son.wav
